@@ -5,9 +5,9 @@ Mindustry refuses to start on arm64 Linux:
     Couldn't load shared library 'libsdl-arcarm64.so' for target: Linux, 64-bit
     Unable to read file for extraction: libsdl-arcarm64.so
 
-Every other Arc native is in the jar for arm64 (`libarcarm64.so`,
+Every Arc native lib is in the jar for arm64 (`libarcarm64.so`,
 `libarc-freetypearm64.so`, `libarc-filedialogsarm64.so`) only the SDL backend
-is missing. The gap is in Arc.
+is missing.
 
 This directory builds that one missing JNI wrapper and injects it into the jar.
 
@@ -53,8 +53,7 @@ driver SDL ends up on. SDL2 tries its x11 driver before wayland, so it picks
 x11 whenever an X display is reachable, on an X session as well as through
 XWayland.
 
-The default build (`GLEW=glx`) uses `glXGetProcAddressARB` and runs there
-without any setting:
+The default build (`GLEW=glx`) runs without any setting:
 
     java -jar Mindustry.jar
 
@@ -62,15 +61,12 @@ An EGL build on the same x11 driver needs an EGL context instead of a GLX one:
 
     SDL_VIDEO_X11_FORCE_EGL=1 java -jar Mindustry.jar
 
-For a native Wayland window, ask for the driver SDL would not pick on its own:
+For a native Wayland window, set `SDL_VIDEODRIVER` to wayland:
 
     make GLEW=egl
     SDL_VIDEODRIVER=wayland java -jar Mindustry.jar
 
-`SDL_VIDEODRIVER` names one driver and does not fall back. With `wayland` and no
-compositor, `SDL_Init` fails instead of trying x11.
-
-### Example desktop entry for Wayland
+### Example desktop entry for Wayland (egl build)
 
 `GLEW=egl` build. `SDL_VIDEO_WAYLAND_WMCLASS` sets the window class, which SDL
 otherwise takes from `argv[0]`, here `java`. Without it the desktop shell cannot
@@ -86,9 +82,7 @@ StartupWMClass=Mindustry
 Terminal=false
 ```
 
-### Example desktop entry for X11
-
-Default build. No `SDL_VIDEODRIVER`, since x11 is what SDL picks anyway.
+### Example desktop entry for X11 (glx build)
 
 ```desktop
 [Desktop Entry]
@@ -102,11 +96,6 @@ Terminal=false
 
 ## If something looks wrong
 
-The x86-64 `libSDL2.so` in the jar is not a second problem. Arc pre-loads it via
-`System.load()` on Linux and swallows the failure in `catch(Throwable)`. The
-wrapper links against `libSDL2-2.0.so.0` and gets the system SDL2, so a start
-that reports your system's SDL version is working as intended.
-
 `GLEW failed to initialize` means the build and the video driver disagree.
 `Unknown error` is a GLX build on an EGL context, `Missing GL version` an EGL
 build on a GLX context.
@@ -114,3 +103,13 @@ build on a GLX context.
 The build is loud. The `-Wint-to-pointer-cast` and unused-variable warnings from
 `SDLGL.cpp` are normal jnigen output and appear in the x86 build too. What
 matters is `make check`, which `make patch` runs for you.
+
+## Tested on
+
+    Gentoo Linux, aarch64 (Apple M2, Asahi)
+    Temurin JDK 25.0.4
+    gcc 15.3.0
+    SDL2 2.32.8
+    Mindustry 159.7, Arc c4c3707ae8
+
+Both build variants, GLX on XWayland and EGL on Wayland.

@@ -1,0 +1,4 @@
+work/
+*.o
+*.so
+Mindustry.jar*

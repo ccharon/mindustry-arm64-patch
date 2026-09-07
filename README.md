@@ -56,10 +56,12 @@ can point at a different commit; pass `ARCHASH=` from your `gradle.properties`.
 
 GLEW resolves the GL entry points, and it can only do so through one API. The
 default build (`GLEW=glx`) uses `glXGetProcAddressARB` and therefore needs an
-X11 display. On a Wayland desktop that is XWayland, which SDL2 picks by itself,
-so the default just works:
+X11 display. On a Wayland desktop that is XWayland:
 
-    java -jar Mindustry.jar
+    SDL_VIDEODRIVER=x11 java -jar Mindustry.jar
+
+Plain `java -jar Mindustry.jar` works as long as SDL2 sorts its x11 driver
+first; naming the driver makes it independent of that.
 
 For a native Wayland window, build the other variant and tell SDL to use it:
 
@@ -73,7 +75,7 @@ context as well, otherwise `glewInit` fails with `Missing GL version`:
 
 Setting both variables covers either session type with one command line.
 
-### Example desktop entry
+### Example desktop entry for Wayland
 
 Wayland, `GLEW=egl` build. `SDL_VIDEO_*_WMCLASS` is unrelated to GL: SDL derives
 the window class from `argv[0]`, which is `java` here, so without it the window
@@ -89,8 +91,21 @@ StartupWMClass=Mindustry
 Terminal=false
 ```
 
-For a `GLEW=glx` build, drop `SDL_VIDEODRIVER` and `SDL_VIDEO_X11_FORCE_EGL`
-and keep the rest.
+### Example desktop entry for X11
+
+Default build, no `GLEW=`. `SDL_VIDEODRIVER=x11` is not redundant: whether the
+x11 or the wayland driver comes first depends on how your SDL2 was built, and a
+GLX build reaching the wayland driver fails to start.
+
+```desktop
+[Desktop Entry]
+Type=Application
+Name=Mindustry
+Icon=/path/to/mindustry.png
+Exec=env SDL_VIDEODRIVER=x11 SDL_VIDEO_X11_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
+StartupWMClass=Mindustry
+Terminal=false
+```
 
 ## If something looks wrong
 

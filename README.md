@@ -48,30 +48,28 @@ to patch if a native method is missing.
 
 ## X11 or Wayland
 
-GLEW resolves the GL entry points, and it can only do so through one API. The
-default build (`GLEW=glx`) uses `glXGetProcAddressARB` 
+GLEW binds to one GL loader at build time. The default build (`GLEW=glx`) needs
+an X11 display, which on a Wayland desktop is XWayland:
+
     SDL_VIDEODRIVER=x11 java -jar Mindustry.jar
 
-Plain `java -jar Mindustry.jar` works as long as SDL2 sorts its x11 driver
-first; naming the driver makes it independent of that.
-
-For a native Wayland window, build the other variant and tell SDL to use it:
+For a native Wayland window, build the other variant and run it there:
 
     make GLEW=egl
     SDL_VIDEODRIVER=wayland java -jar Mindustry.jar
 
-A `GLEW=egl` build has no GLX path left, so on X11 it needs SDL's EGL
-context as well, otherwise `glewInit` fails with `Missing GL version`:
+An EGL build on X11 needs SDL's EGL context as well:
 
     SDL_VIDEODRIVER=x11 SDL_VIDEO_X11_FORCE_EGL=1 java -jar Mindustry.jar
 
-Setting both variables covers either session type with one command line.
+Always name the driver. SDL2 picks one by itself, but which one depends on how
+it was built, and the wrong one stops the game from starting.
 
 ### Example desktop entry for Wayland
 
-Wayland, `GLEW=egl` build. `SDL_VIDEO_*_WMCLASS` is unrelated to GL: SDL derives
-the window class from `argv[0]`, which is `java` here, so without it the window
-is not matched to this launcher (and its icon) by the desktop shell.
+`GLEW=egl` build. The `WMCLASS` hints set the window class, which SDL otherwise
+takes from `argv[0]`, here `java`. Without them the desktop shell cannot match
+the window to this launcher.
 
 ```desktop
 [Desktop Entry]
@@ -85,9 +83,7 @@ Terminal=false
 
 ### Example desktop entry for X11
 
-Default build, no `GLEW=`. `SDL_VIDEODRIVER=x11` is not redundant: whether the
-x11 or the wayland driver comes first depends on how your SDL2 was built, and a
-GLX build reaching the wayland driver fails to start.
+Default build.
 
 ```desktop
 [Desktop Entry]
@@ -101,15 +97,15 @@ Terminal=false
 
 ## If something looks wrong
 
-- **The x86-64 `libSDL2.so` in the jar is not a second problem.** It looks like
-  one. Arc pre-loads it via `System.load()` on Linux and swallows the failure in
-  `catch(Throwable)`; the wrapper links dynamically against
-  `libSDL2-2.0.so.0` and gets the system SDL2. If the game starts and reports
-  your system's SDL version, that is working as intended.
-- **`GLEW failed to initialize`.** The build variant and the SDL video driver
-  disagree; see *X11 or Wayland* above. `Unknown error` is a `GLEW=egl` build on
-  a GLX context, `Missing GL version` an EGL context reached by a `GLEW=glx`
-  build.
-- **The build is loud.** `-Wint-to-pointer-cast` and unused-variable warnings out
-  of `SDLGL.cpp` are normal jnigen output and appear in the x86 build too. What
-  matters is `make check`, which is run for you by `make patch`.
+The x86-64 `libSDL2.so` in the jar is not a second problem. Arc pre-loads it via
+`System.load()` on Linux and swallows the failure in `catch(Throwable)`. The
+wrapper links against `libSDL2-2.0.so.0` and gets the system SDL2, so a start
+that reports your system's SDL version is working as intended.
+
+`GLEW failed to initialize` means the build and the video driver disagree.
+`Unknown error` is a GLX build on an EGL context, `Missing GL version` an EGL
+build on a GLX context.
+
+The build is loud. The `-Wint-to-pointer-cast` and unused-variable warnings from
+`SDLGL.cpp` are normal jnigen output and appear in the x86 build too. What
+matters is `make check`, which `make patch` runs for you.

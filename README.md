@@ -6,21 +6,17 @@ Mindustry refuses to start on arm64 Linux:
     Unable to read file for extraction: libsdl-arcarm64.so
 
 Every other Arc native is in the jar for arm64 (`libarcarm64.so`,
-`libarc-freetypearm64.so`, `libarc-filedialogsarm64.so`) — only the SDL backend
-is missing. The gap is in Arc, not in your build: `backends/backend-sdl/build.gradle`
-declares `addLinux(x64, x86)`, so the published artifact
-`com.github.Anuken.Arc:backend-sdl` does not contain the blob either.
+`libarc-freetypearm64.so`, `libarc-filedialogsarm64.so`) only the SDL backend
+is missing. The gap is in Arc.
 
-This directory builds that one missing JNI wrapper and injects it into a jar.
+This directory builds that one missing JNI wrapper and injects it into the jar.
 
 ## What you need
 
-- **The `Mindustry.jar` you downloaded.** This kit patches that jar, it does not
-  build the game and does not need its sources.
+- **The `Mindustry.jar`** This kit patches that jar
 - A JDK (headers included, a JRE is not enough), `gcc`/`g++`, `git`, `curl`,
   `zip`/`unzip`, `nm`, and SDL2 development files (`sdl2-config` on `PATH`).
-- Network access on the first run: Arc is cloned, Gradle bootstraps itself and
-  pulls GLEW 2.2.0.
+- Network access: Arc is cloned, Gradle bootstraps itself and pulls GLEW 2.2.0.
 
 `make tools` lists whatever is missing.
 
@@ -45,19 +41,15 @@ Other targets:
     GLEW=egl        build against EGL instead of GLX (see below)
 
 The Arc commit matters: the wrapper is generated from Arc's `SDL.java` /
-`SDLGL.java`, so it has to come from the commit your jar was built against. It is
-not stored in the jar, so `make` looks it up from the `v<build>` release tag at
-<https://github.com/Anuken/Mindustry>. `check` then confirms the result against
-the jar's own classes and refuses to patch if a native method is missing — that,
-not the hash, is what settles it. If you built the jar yourself, the tag lookup
-can point at a different commit; pass `ARCHASH=` from your `gradle.properties`.
+`SDLGL.java`, so it has to come from the commit your jar was built against.
+`make` looks it up from the `v<build>` release tag at <https://github.com/Anuken/Mindustry>. 
+`check` then confirms the result against the jar's own classes and refuses 
+to patch if a native method is missing. 
 
 ## X11 or Wayland
 
 GLEW resolves the GL entry points, and it can only do so through one API. The
-default build (`GLEW=glx`) uses `glXGetProcAddressARB` and therefore needs an
-X11 display. On a Wayland desktop that is XWayland:
-
+default build (`GLEW=glx`) uses `glXGetProcAddressARB` 
     SDL_VIDEODRIVER=x11 java -jar Mindustry.jar
 
 Plain `java -jar Mindustry.jar` works as long as SDL2 sorts its x11 driver

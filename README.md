@@ -48,22 +48,27 @@ to patch if a native method is missing.
 
 ## X11 or Wayland
 
-GLEW binds to one GL loader at build time. The default build (`GLEW=glx`) needs
-an X11 display, which on a Wayland desktop is XWayland:
+GLEW binds to one GL loader at build time, so the build has to match the video
+driver SDL ends up on. SDL2 tries its x11 driver before wayland, so it picks
+x11 whenever an X display is reachable, on an X session as well as through
+XWayland.
 
-    SDL_VIDEODRIVER=x11 java -jar Mindustry.jar
+The default build (`GLEW=glx`) uses `glXGetProcAddressARB` and runs there
+without any setting:
 
-For a native Wayland window, build the other variant and run it there:
+    java -jar Mindustry.jar
+
+An EGL build on the same x11 driver needs an EGL context instead of a GLX one:
+
+    SDL_VIDEO_X11_FORCE_EGL=1 java -jar Mindustry.jar
+
+For a native Wayland window, ask for the driver SDL would not pick on its own:
 
     make GLEW=egl
     SDL_VIDEODRIVER=wayland java -jar Mindustry.jar
 
-An EGL build on X11 needs SDL's EGL context as well:
-
-    SDL_VIDEODRIVER=x11 SDL_VIDEO_X11_FORCE_EGL=1 java -jar Mindustry.jar
-
-Always name the driver. SDL2 picks one by itself, but which one depends on how
-it was built, and the wrong one stops the game from starting.
+`SDL_VIDEODRIVER` names one driver and does not fall back. With `wayland` and no
+compositor, `SDL_Init` fails instead of trying x11.
 
 ### Example desktop entry for Wayland
 
@@ -83,14 +88,14 @@ Terminal=false
 
 ### Example desktop entry for X11
 
-Default build.
+Default build. No `SDL_VIDEODRIVER`, since x11 is what SDL picks anyway.
 
 ```desktop
 [Desktop Entry]
 Type=Application
 Name=Mindustry
 Icon=/path/to/mindustry.png
-Exec=env SDL_VIDEODRIVER=x11 SDL_VIDEO_X11_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
+Exec=env SDL_VIDEO_X11_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
 StartupWMClass=Mindustry
 Terminal=false
 ```

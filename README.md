@@ -42,6 +42,7 @@ Other targets:
     make clean      drop build products (distclean: everything)
     JAR=<path>      patch a jar somewhere else
     ARCHASH=<hash>  force an Arc commit
+    GLEW=egl        build against EGL instead of GLX (see below)
 
 The Arc commit matters: the wrapper is generated from Arc's `SDL.java` /
 `SDLGL.java`, so it has to come from the commit your jar was built against. It is
@@ -51,6 +52,46 @@ the jar's own classes and refuses to patch if a native method is missing — tha
 not the hash, is what settles it. If you built the jar yourself, the tag lookup
 can point at a different commit; pass `ARCHASH=` from your `gradle.properties`.
 
+## X11 or Wayland
+
+GLEW resolves the GL entry points, and it can only do so through one API. The
+default build (`GLEW=glx`) uses `glXGetProcAddressARB` and therefore needs an
+X11 display. On a Wayland desktop that is XWayland, which SDL2 picks by itself,
+so the default just works:
+
+    java -jar Mindustry.jar
+
+For a native Wayland window, build the other variant and tell SDL to use it:
+
+    make GLEW=egl
+    SDL_VIDEODRIVER=wayland java -jar Mindustry.jar
+
+A `GLEW=egl` build has no GLX path left, so on X11 it needs SDL's EGL
+context as well, otherwise `glewInit` fails with `Missing GL version`:
+
+    SDL_VIDEODRIVER=x11 SDL_VIDEO_X11_FORCE_EGL=1 java -jar Mindustry.jar
+
+Setting both variables covers either session type with one command line.
+
+### Example desktop entry
+
+Wayland, `GLEW=egl` build. `SDL_VIDEO_*_WMCLASS` is unrelated to GL: SDL derives
+the window class from `argv[0]`, which is `java` here, so without it the window
+is not matched to this launcher (and its icon) by the desktop shell.
+
+```desktop
+[Desktop Entry]
+Type=Application
+Name=Mindustry
+Icon=/path/to/mindustry.png
+Exec=env SDL_VIDEODRIVER=wayland SDL_VIDEO_X11_FORCE_EGL=1 SDL_VIDEO_WAYLAND_WMCLASS=Mindustry SDL_VIDEO_X11_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
+StartupWMClass=Mindustry
+Terminal=false
+```
+
+For a `GLEW=glx` build, drop `SDL_VIDEODRIVER` and `SDL_VIDEO_X11_FORCE_EGL`
+and keep the rest.
+
 ## If something looks wrong
 
 - **The x86-64 `libSDL2.so` in the jar is not a second problem.** It looks like
@@ -58,6 +99,10 @@ can point at a different commit; pass `ARCHASH=` from your `gradle.properties`.
   `catch(Throwable)`; the wrapper links dynamically against
   `libSDL2-2.0.so.0` and gets the system SDL2. If the game starts and reports
   your system's SDL version, that is working as intended.
+- **`GLEW failed to initialize`.** The build variant and the SDL video driver
+  disagree; see *X11 or Wayland* above. `Unknown error` is a `GLEW=egl` build on
+  a GLX context, `Missing GL version` an EGL context reached by a `GLEW=glx`
+  build.
 - **The build is loud.** `-Wint-to-pointer-cast` and unused-variable warnings out
   of `SDLGL.cpp` are normal jnigen output and appear in the x86 build too. What
   matters is `make check`, which is run for you by `make patch`.

@@ -9,6 +9,11 @@
 # That checks the tools, works out which Arc commit the jar was built against,
 # builds the JNI wrapper and injects it (keeping a backup as Mindustry.jar.orig).
 # Override with JAR=<path> or ARCHASH=<arc commit> if you need to.
+#
+# GLEW=glx (default) resolves GL entry points through glXGetProcAddressARB, so
+# the game needs an X11 display (XWayland counts). GLEW=egl uses
+# eglGetProcAddress instead, which is what SDL's wayland driver hands out - see
+# README, it needs two environment variables at run time.
 
 JAR      ?= $(dir $(lastword $(MAKEFILE_LIST)))Mindustry.jar
 LIB      := libsdl-arcarm64.so
@@ -16,8 +21,12 @@ WORK     ?= work
 ARC_REPO ?= https://github.com/Anuken/Arc.git
 MDT_RAW  ?= https://raw.githubusercontent.com/Anuken/Mindustry
 ARCHASH  ?=
+GLEW     ?= glx
+ifeq ($(strip $(GLEW)),)
+override GLEW := glx
+endif
 
-.PHONY: patch check unpatch archash tools help clean distclean
+.PHONY: patch check unpatch archash tools help clean distclean FORCE
 .DEFAULT_GOAL := patch
 
 help:
@@ -29,6 +38,7 @@ help:
 	@echo
 	@echo 'JAR=<path>      patch another jar than ./Mindustry.jar'
 	@echo 'ARCHASH=<hash>  force an Arc commit (self-built jars)'
+	@echo 'GLEW=egl        build against EGL instead of GLX (native Wayland)'
 
 tools:
 	@ok=0; for t in git gcc g++ javac javap nm curl zip unzip sdl2-config; do \
@@ -43,7 +53,7 @@ unpatch:
 	zip -qd '$(JAR)' $(LIB) && echo "removed $(LIB) from $(JAR)"
 
 clean:
-	rm -f $(WORK)/*.o $(WORK)/archash $(LIB)
+	rm -rf $(WORK)/obj-* $(WORK)/archash $(WORK)/glew-backend $(LIB)
 
 distclean:
 	rm -rf $(WORK) $(LIB)
@@ -66,7 +76,7 @@ ifeq ($(strip $(ARCHASH)),)
 
 # No commit given: resolve it from the jar first, then run the real rules.
 patch check: $(WORK)/archash
-	@$(MAKE) --no-print-directory $@ ARCHASH="$$(cat $(WORK)/archash)"
+	@$(MAKE) --no-print-directory $@ ARCHASH="$$(cat $(WORK)/archash)" GLEW='$(GLEW)'
 
 else
 
@@ -75,13 +85,24 @@ JNI      := $(SRCDIR)/backends/backend-sdl/build/jnigen/jni
 GEN      := $(SRCDIR)/backends/backend-sdl/build/jnigen/sources
 JAVA_INC := $(shell dirname $$(dirname $$(readlink -f $$(command -v javac))))/include
 
-CFLAGS_COMMON := -c -Wall -O2 -fPIC -fmessage-length=0 -DGLEW_STATIC -DGLEW_NO_GLU
+ifeq ($(GLEW),egl)
+GLEW_FLAGS := -DGLEW_EGL
+GL_LIBS    := -lEGL -lGL
+else ifeq ($(GLEW),glx)
+GLEW_FLAGS :=
+GL_LIBS    := -lGL
+else
+$(error GLEW must be glx or egl, not '$(GLEW)')
+endif
+
+CFLAGS_COMMON := -c -Wall -O2 -fPIC -fmessage-length=0 -DGLEW_STATIC -DGLEW_NO_GLU $(GLEW_FLAGS)
 INCLUDES       = -I$(JNI) -I$(JNI)/jni-headers -I$(JNI)/jni-headers/linux \
                  -I$(JAVA_INC) -I$(JAVA_INC)/linux -I$(GEN)/glew-2.2.0/include
 SDL_CFLAGS    := $(shell sdl2-config --cflags 2>/dev/null)
 SDL_LIBS      := $(shell sdl2-config --libs 2>/dev/null)
 
-OBJS := $(WORK)/glew.o $(WORK)/arc_backend_sdl_jni_SDL.o $(WORK)/arc_backend_sdl_jni_SDLGL.o
+OBJDIR := $(WORK)/obj-$(GLEW)
+OBJS   := $(OBJDIR)/glew.o $(OBJDIR)/arc_backend_sdl_jni_SDL.o $(OBJDIR)/arc_backend_sdl_jni_SDLGL.o
 
 $(SRCDIR)/.stamp-clone: | tools
 	git clone -q $(ARC_REPO) $(SRCDIR)
@@ -96,14 +117,24 @@ $(SRCDIR)/.stamp-jnigen: $(SRCDIR)/.stamp-clone
 	cd $(SRCDIR) && ./gradlew --console=plain :backends:backend-sdl:jnigen
 	@touch $@
 
-$(WORK)/glew.o: $(SRCDIR)/.stamp-jnigen
+$(OBJDIR)/glew.o: $(SRCDIR)/.stamp-jnigen
+	@mkdir -p $(OBJDIR)
 	gcc $(CFLAGS_COMMON) $(INCLUDES) $(SDL_CFLAGS) -o $@ $(GEN)/glew-2.2.0/src/glew.c
 
-$(WORK)/%.o: $(SRCDIR)/.stamp-jnigen
+$(OBJDIR)/%.o: $(SRCDIR)/.stamp-jnigen
+	@mkdir -p $(OBJDIR)
 	g++ $(CFLAGS_COMMON) $(INCLUDES) $(SDL_CFLAGS) -o $@ $(JNI)/$*.cpp
 
-$(LIB): $(OBJS)
-	g++ -shared -o $@ $(OBJS) $(SDL_LIBS) -Wl,-Bdynamic -lGL
+# Records which GLEW backend $(LIB) was linked with, so switching GLEW= relinks
+# even when the objects of that variant are still cached from an earlier run.
+$(WORK)/glew-backend: FORCE
+	@mkdir -p $(WORK)
+	@[ "$$(cat $@ 2>/dev/null)" = '$(GLEW)' ] || echo '$(GLEW)' > $@
+
+FORCE:
+
+$(LIB): $(OBJS) $(WORK)/glew-backend
+	g++ -shared -o $@ $(OBJS) $(SDL_LIBS) -Wl,-Bdynamic $(GL_LIBS)
 	@file -b $@ | grep -q 'ARM aarch64' || { echo "not an aarch64 object - wrong toolchain?"; rm -f $@; exit 1; }
 
 # Compares the native methods declared in the jar's own Arc classes against the

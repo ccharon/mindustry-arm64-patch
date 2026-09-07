@@ -67,16 +67,16 @@ it was built, and the wrong one stops the game from starting.
 
 ### Example desktop entry for Wayland
 
-`GLEW=egl` build. The `WMCLASS` hints set the window class, which SDL otherwise
-takes from `argv[0]`, here `java`. Without them the desktop shell cannot match
-the window to this launcher.
+`GLEW=egl` build. `SDL_VIDEO_WAYLAND_WMCLASS` sets the window class, which SDL
+otherwise takes from `argv[0]`, here `java`. Without it the desktop shell cannot
+match the window to this launcher.
 
 ```desktop
 [Desktop Entry]
 Type=Application
 Name=Mindustry
 Icon=/path/to/mindustry.png
-Exec=env SDL_VIDEODRIVER=wayland SDL_VIDEO_X11_FORCE_EGL=1 SDL_VIDEO_WAYLAND_WMCLASS=Mindustry SDL_VIDEO_X11_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
+Exec=env SDL_VIDEODRIVER=wayland SDL_VIDEO_WAYLAND_WMCLASS=Mindustry java -jar /path/to/Mindustry.jar
 StartupWMClass=Mindustry
 Terminal=false
 ```
